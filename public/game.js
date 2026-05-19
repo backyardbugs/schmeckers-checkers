@@ -18,6 +18,7 @@
   let validTargets = [];
   let drag = null;
   let pointerId = null;
+  let suppressClick = false;
   const DRAG_THRESHOLD = 12;
 
   const squares = [];
@@ -274,15 +275,13 @@
   }
 
   function endDrag(x, y) {
-    if (!drag) return;
-    drag.pieceEl.classList.remove("dragging");
+    if (!drag?.ghost) return;
+    if (drag.pieceEl) drag.pieceEl.classList.remove("dragging");
     drag.ghost.remove();
-    drag = null;
-    pointerId = null;
 
     const target = squareFromPoint(x, y);
     if (target) tryMoveTo(target.row, target.col);
-    updateHighlights();
+    else updateHighlights();
   }
 
   function handleBoardTap(row, col) {
@@ -307,10 +306,18 @@
   }
 
   function setupBoardInput() {
+    // Reliable click/tap on desktop and mobile
+    boardEl.addEventListener("click", (e) => {
+      if (!canInteract() || suppressClick) return;
+      const sq = e.target.closest(".square");
+      if (!sq) return;
+      handleBoardTap(Number(sq.dataset.row), Number(sq.dataset.col));
+    });
+
     boardEl.addEventListener(
       "pointerdown",
       (e) => {
-        if (!canInteract()) return;
+        if (!canInteract() || e.button > 0) return;
         const sq = e.target.closest(".square");
         if (!sq) return;
 
@@ -318,14 +325,10 @@
         const col = Number(sq.dataset.col);
         const piece = board[row][col];
         const isMine = piece && pieceColor(piece) === myColor;
+        if (!isMine) return;
 
-        if (!isMine && !selected) return;
-
-        e.preventDefault();
         boardEl.setPointerCapture(e.pointerId);
         pointerId = e.pointerId;
-
-        if (isMine) selectPiece(row, col);
 
         const pieceEl = sq.querySelector(".piece.mine");
         drag = {
@@ -338,24 +341,27 @@
           moved: false,
         };
       },
-      { passive: false }
+      { passive: true }
     );
 
     boardEl.addEventListener(
       "pointermove",
       (e) => {
-        if (!drag || e.pointerId !== pointerId) return;
+        if (!drag || e.pointerId !== pointerId || !drag.pieceEl) return;
         const dx = e.clientX - drag.startX;
         const dy = e.clientY - drag.startY;
 
-        if (!drag.moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD && drag.pieceEl) {
+        if (!drag.ghost && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
+          e.preventDefault();
+          if (!selected) selectPiece(
+            Number(drag.pieceEl.closest(".square").dataset.row),
+            Number(drag.pieceEl.closest(".square").dataset.col)
+          );
           beginDrag(drag.pieceEl, e.clientX, e.clientY);
         }
 
         if (drag.ghost) {
           e.preventDefault();
-          drag.clientX = e.clientX;
-          drag.clientY = e.clientY;
           drag.ghost.style.left = `${e.clientX}px`;
           drag.ghost.style.top = `${e.clientY}px`;
         }
@@ -363,26 +369,29 @@
       { passive: false }
     );
 
-    const finish = (e) => {
+    const finishPointer = (e) => {
       if (!drag || e.pointerId !== pointerId) return;
-      boardEl.releasePointerCapture(e.pointerId);
-
-      if (drag.ghost) {
-        endDrag(e.clientX, e.clientY);
-        return;
+      try {
+        boardEl.releasePointerCapture(e.pointerId);
+      } catch (_) {
+        /* already released */
       }
 
-      const sq = e.target.closest(".square");
-      if (sq) {
-        handleBoardTap(Number(sq.dataset.row), Number(sq.dataset.col));
+      if (drag.ghost) {
+        e.preventDefault();
+        suppressClick = true;
+        endDrag(e.clientX, e.clientY);
+        setTimeout(() => {
+          suppressClick = false;
+        }, 50);
       }
 
       drag = null;
       pointerId = null;
     };
 
-    boardEl.addEventListener("pointerup", finish);
-    boardEl.addEventListener("pointercancel", finish);
+    boardEl.addEventListener("pointerup", finishPointer);
+    boardEl.addEventListener("pointercancel", finishPointer);
   }
 
   function applyServerState(state) {
