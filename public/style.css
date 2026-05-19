@@ -1,0 +1,195 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --board-size: min(92vmin, 640px);
+  --paper: #f4ecd8;
+  --ink: #2b2118;
+  --highlight: rgba(255, 220, 80, 0.45);
+  --valid: rgba(90, 200, 120, 0.5);
+  --red-piece: #e85d4a;
+  --red-shadow: #9c3428;
+  --black-piece: #3d342c;
+  --black-shadow: #1a1510;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Nunito", system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 10%, #fff8ea 0%, transparent 45%),
+    radial-gradient(circle at 80% 90%, #efe2c4 0%, transparent 40%),
+    var(--paper);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 1rem 2rem;
+}
+
+.hud {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.hud h1 {
+  font-family: "Caveat", cursive;
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin: 0 0 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+#status-text,
+#turn-text {
+  margin: 0.15rem 0;
+  font-weight: 600;
+}
+
+.board-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.board-frame {
+  position: relative;
+  width: var(--board-size);
+  height: var(--board-size);
+  filter: drop-shadow(0 12px 28px rgba(43, 33, 24, 0.18));
+}
+
+.board-bg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  /* Fallback sketch board when board-bg.png is missing */
+  background:
+    linear-gradient(135deg, #d9c9a8 25%, transparent 25%) -12px 0 / 24px 24px,
+    linear-gradient(225deg, #d9c9a8 25%, transparent 25%) -12px 0 / 24px 24px,
+    linear-gradient(315deg, #d9c9a8 25%, transparent 25%) 0 0 / 24px 24px,
+    linear-gradient(45deg, #d9c9a8 25%, #e8dcc0 25%) 0 0 / 24px 24px;
+  border: 3px solid var(--ink);
+}
+
+#chessboard {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 100%;
+  height: 100%;
+}
+
+.square {
+  position: relative;
+  background: transparent;
+  cursor: default;
+}
+
+.square.playable,
+.square.valid-target {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.square.selected {
+  outline: 3px dashed var(--ink);
+  outline-offset: -4px;
+  background: var(--highlight);
+}
+
+.square.valid-target::after {
+  content: "";
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  background: var(--valid);
+  border: 2px dashed var(--ink);
+  pointer-events: none;
+}
+
+.piece {
+  position: absolute;
+  width: 85%;
+  height: 85%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: center / contain no-repeat;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.piece.mine {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  transition: filter 0.12s ease;
+}
+
+.piece.mine.dragging {
+  cursor: grabbing;
+  opacity: 0.35;
+}
+
+.piece.drag-ghost {
+  position: fixed;
+  width: 72px;
+  height: 72px;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.95;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
+}
+
+
+.piece.red {
+  background-image: url("redpiece.png");
+}
+
+.piece.red.king {
+  background-image: url("redking.png");
+}
+
+.piece.blue {
+  background-image: url("bluepiece.png");
+}
+
+.piece.blue.king {
+  background-image: url("blueking.png");
+}
+
+.piece.mine:not(.dragging) {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6));
+}
+
+.piece.opponent {
+  cursor: default;
+}
+
+.hint {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  opacity: 0.75;
+  text-align: center;
+  max-width: 36rem;
+}

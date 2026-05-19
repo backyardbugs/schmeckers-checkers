@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand-Drawn Checkers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hud">
+    <h1>Hand-Drawn Checkers</h1>
+    <p id="status-text">Connecting…</p>
+    <p id="turn-text"></p>
+  </header>
+
+  <main class="board-stage">
+    <div class="board-frame">
+      <img
+        id="board-bg"
+        class="board-bg"
+        src="Shmeckers.jpg"
+        alt="Shmeckers checkers board"
+        width="640"
+        height="640"
+      />
+      <div id="chessboard" aria-label="Checkers board"></div>
+    </div>
+  </main>
+
+  <p class="hint">Drag a piece to a green circle, or tap a piece then tap where to go.</p>
+  <p class="hint share-hint">Two-player: open the same link on both phones. Red moves first.</p>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

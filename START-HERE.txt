@@ -1,0 +1,26 @@
+SCHMECKERS CHECKERS — START HERE
+=================================
+
+STEP 1 — Put these 6 files in the "public" folder:
+
+  public/Shmeckers.jpg   (your file — note spelling)
+  public/redpiece.png
+  public/redking.png
+  public/bluepiece.png
+  public/blueking.png
+
+  (This folder is inside "checkers" on your SSD or in your Home folder.)
+
+STEP 2 — Run the game (Terminal):
+
+  cd "/Volumes/T's SSD/checkers"
+  npm start
+
+  Open: http://localhost:3000
+
+  Hard refresh in the browser if images look old: Cmd + Shift + R
+
+---
+
+The game is already set up to use your file names. No editing needed
+once the images are in the public folder.

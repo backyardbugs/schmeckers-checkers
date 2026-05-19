@@ -1,0 +1,16 @@
+{
+  "name": "hand-drawn-checkers",
+  "version": "1.0.0",
+  "description": "Multiplayer web checkers with a hand-drawn board overlay",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["checkers", "multiplayer", "socket.io"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
