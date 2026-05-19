@@ -6,11 +6,9 @@
 
 :root {
   --board-size: min(92vmin, 640px);
-  --blue-deep: #1a3d6b;
-  --blue-mid: #2d5f9e;
-  --blue-light: #4a85c4;
+  --page-blue: #002eff;
   --ink: #f5f8fc;
-  --ink-muted: rgba(245, 248, 252, 0.82);
+  --ink-muted: rgba(245, 248, 252, 0.85);
   --highlight: rgba(255, 220, 80, 0.45);
   --valid: rgba(90, 200, 120, 0.5);
 }
@@ -24,10 +22,7 @@ body {
 body {
   font-family: "Nunito", system-ui, sans-serif;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 15% 20%, var(--blue-light) 0%, transparent 42%),
-    radial-gradient(circle at 85% 80%, var(--blue-mid) 0%, transparent 45%),
-    linear-gradient(160deg, var(--blue-deep) 0%, #152f52 50%, var(--blue-deep) 100%);
+  background: var(--page-blue);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
