@@ -33,6 +33,8 @@ body {
   flex-direction: column;
   align-items: center;
   padding: 1rem 1rem 2rem;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .hud {
@@ -74,6 +76,9 @@ body {
   height: 100%;
   object-fit: cover;
   border-radius: 6px;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
   /* Fallback sketch board when board-bg.png is missing */
   background:
     linear-gradient(135deg, #d9c9a8 25%, transparent 25%) -12px 0 / 24px 24px,
@@ -91,12 +96,15 @@ body {
   grid-template-rows: repeat(8, 1fr);
   width: 100%;
   height: 100%;
+  z-index: 5;
+  touch-action: none;
 }
 
 .square {
   position: relative;
   background: transparent;
   cursor: default;
+  touch-action: manipulation;
 }
 
 .square.playable,
@@ -134,13 +142,7 @@ body {
   background: center / contain no-repeat;
   pointer-events: none;
   z-index: 2;
-}
-
-.piece.mine {
-  pointer-events: auto;
-  cursor: grab;
   touch-action: none;
-  transition: filter 0.12s ease;
 }
 
 .piece.mine.dragging {

@@ -17,8 +17,8 @@
   let selected = null;
   let validTargets = [];
   let drag = null;
-  let pendingDrag = null;
-  const DRAG_THRESHOLD = 10;
+  let pointerId = null;
+  const DRAG_THRESHOLD = 12;
 
   const squares = [];
 
@@ -133,7 +133,6 @@
         sq.className = "square";
         sq.dataset.row = String(row);
         sq.dataset.col = String(col);
-        sq.addEventListener("click", () => onSquareClick(row, col));
         boardEl.appendChild(sq);
         squares.push(sq);
       }
@@ -144,44 +143,46 @@
     return squares[row * 8 + col];
   }
 
-  function renderBoard() {
+  function updateHighlights() {
     for (const sq of squares) {
       sq.classList.remove("selected", "valid-target", "playable");
+    }
+    if (!canInteract()) return;
+
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        if (board[row][col] && pieceColor(board[row][col]) === myColor) {
+          squareAt(row, col).classList.add("playable");
+        }
+      }
+    }
+    if (!selected) return;
+    squareAt(selected.row, selected.col).classList.add("selected");
+    for (const move of validTargets) {
+      squareAt(move.to.row, move.to.col).classList.add("valid-target");
+    }
+  }
+
+  function renderBoard() {
+    for (const sq of squares) {
       sq.querySelectorAll(".piece").forEach((p) => p.remove());
     }
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const piece = board[row][col];
-        const sq = squareAt(row, col);
         if (!piece) continue;
-
+        const sq = squareAt(row, col);
         const el = document.createElement("div");
         el.className = "piece";
         const color = pieceColor(piece);
         el.classList.add(color === "black" ? "blue" : color);
         if (isKing(piece)) el.classList.add("king");
-
-        if (myColor === color) {
-          el.classList.add("mine");
-          if (isMyTurn() && canInteract()) {
-            sq.classList.add("playable");
-          }
-        } else {
-          el.classList.add("opponent");
-        }
-
+        el.classList.add(myColor === color ? "mine" : "opponent");
         sq.appendChild(el);
-        bindPieceDrag(el, row, col);
       }
     }
-
-    if (selected) {
-      squareAt(selected.row, selected.col).classList.add("selected");
-      for (const move of validTargets) {
-        squareAt(move.to.row, move.to.col).classList.add("valid-target");
-      }
-    }
+    updateHighlights();
   }
 
   function canInteract() {
@@ -239,7 +240,7 @@
 
     selected = { row, col };
     validTargets = getLegalMoves(board, row, col, forced);
-    renderBoard();
+    updateHighlights();
     return true;
   }
 
@@ -250,32 +251,15 @@
     if (!move) return false;
     socket.emit("makeMove", { from: move.from, to: move.to });
     clearSelection();
-    renderBoard();
+    updateHighlights();
     return true;
   }
 
   function squareFromPoint(x, y) {
     const el = document.elementFromPoint(x, y);
     const sq = el?.closest?.(".square");
-    if (!sq) return null;
+    if (!sq || !boardEl.contains(sq)) return null;
     return { row: Number(sq.dataset.row), col: Number(sq.dataset.col) };
-  }
-
-  function endDrag(commit) {
-    if (!drag) return;
-    drag.pieceEl.classList.remove("dragging");
-    drag.ghost.remove();
-    const { clientX, clientY } = drag;
-    drag = null;
-
-    if (!commit) {
-      renderBoard();
-      return;
-    }
-
-    const target = squareFromPoint(clientX, clientY);
-    if (target) tryMoveTo(target.row, target.col);
-    else renderBoard();
   }
 
   function beginDrag(pieceEl, x, y) {
@@ -286,91 +270,25 @@
     pieceEl.classList.add("dragging");
     ghost.style.left = `${x}px`;
     ghost.style.top = `${y}px`;
-    drag = { pieceEl, ghost, clientX: x, clientY: y };
-    pendingDrag = null;
+    drag = { pieceEl, ghost, clientX: x, clientY: y, moved: true };
   }
 
-  function onDragMove(e) {
-    const x = e.clientX ?? e.touches?.[0]?.clientX;
-    const y = e.clientY ?? e.touches?.[0]?.clientY;
-    if (x == null) return;
-
-    if (pendingDrag && !drag) {
-      const dx = x - pendingDrag.startX;
-      const dy = y - pendingDrag.startY;
-      if (Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
-        beginDrag(pendingDrag.pieceEl, x, y);
-      }
-    }
-
+  function endDrag(x, y) {
     if (!drag) return;
-    e.preventDefault?.();
-    drag.clientX = x;
-    drag.clientY = y;
-    drag.ghost.style.left = `${x}px`;
-    drag.ghost.style.top = `${y}px`;
+    drag.pieceEl.classList.remove("dragging");
+    drag.ghost.remove();
+    drag = null;
+    pointerId = null;
+
+    const target = squareFromPoint(x, y);
+    if (target) tryMoveTo(target.row, target.col);
+    updateHighlights();
   }
 
-  function onDragEnd(e) {
-    const x = e.clientX ?? e.changedTouches?.[0]?.clientX;
-    const y = e.clientY ?? e.changedTouches?.[0]?.clientY;
+  function handleBoardTap(row, col) {
+    if (!canInteract()) return;
 
-    if (drag) {
-      if (x != null) {
-        drag.clientX = x;
-        drag.clientY = y;
-      }
-      endDrag(true);
-      return;
-    }
-
-    pendingDrag = null;
-  }
-
-  function bindPieceDrag(el, row, col) {
-    if (!el.classList.contains("mine")) return;
-
-    const start = (e) => {
-      if (!canInteract()) return;
-      if (e.button !== undefined && e.button !== 0) return;
-      e.preventDefault();
-
-      const forced = forcedJumpSquare();
-      if (forced && (forced.row !== row || forced.col !== col)) return;
-
-      const piece = board[row][col];
-      if (!piece || pieceColor(piece) !== myColor) return;
-
-      selected = { row, col };
-      validTargets = getLegalMoves(board, row, col, forced);
-      renderBoard();
-
-      const pieceEl = squareAt(row, col).querySelector(".piece.mine");
-      if (!pieceEl) return;
-
-      const px = e.clientX ?? e.touches[0].clientX;
-      const py = e.clientY ?? e.touches[0].clientY;
-      pendingDrag = { pieceEl, startX: px, startY: py };
-    };
-
-    el.addEventListener("mousedown", start);
-    el.addEventListener("touchstart", start, { passive: false });
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
-  }
-
-  document.addEventListener("mousemove", onDragMove);
-  document.addEventListener("mouseup", onDragEnd);
-  document.addEventListener("touchmove", onDragMove, { passive: false });
-  document.addEventListener("touchend", onDragEnd);
-
-  function onSquareClick(row, col) {
-    if (!canInteract() || drag || pendingDrag) return;
-
-    const piece = board[row][col];
     const forced = forcedJumpSquare();
-
     if (forced) {
       tryMoveTo(row, col);
       return;
@@ -378,13 +296,93 @@
 
     if (selected && tryMoveTo(row, col)) return;
 
+    const piece = board[row][col];
     if (piece && pieceColor(piece) === myColor) {
       selectPiece(row, col);
       return;
     }
 
     clearSelection();
-    renderBoard();
+    updateHighlights();
+  }
+
+  function setupBoardInput() {
+    boardEl.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!canInteract()) return;
+        const sq = e.target.closest(".square");
+        if (!sq) return;
+
+        const row = Number(sq.dataset.row);
+        const col = Number(sq.dataset.col);
+        const piece = board[row][col];
+        const isMine = piece && pieceColor(piece) === myColor;
+
+        if (!isMine && !selected) return;
+
+        e.preventDefault();
+        boardEl.setPointerCapture(e.pointerId);
+        pointerId = e.pointerId;
+
+        if (isMine) selectPiece(row, col);
+
+        const pieceEl = sq.querySelector(".piece.mine");
+        drag = {
+          pieceEl,
+          ghost: null,
+          startX: e.clientX,
+          startY: e.clientY,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          moved: false,
+        };
+      },
+      { passive: false }
+    );
+
+    boardEl.addEventListener(
+      "pointermove",
+      (e) => {
+        if (!drag || e.pointerId !== pointerId) return;
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+
+        if (!drag.moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD && drag.pieceEl) {
+          beginDrag(drag.pieceEl, e.clientX, e.clientY);
+        }
+
+        if (drag.ghost) {
+          e.preventDefault();
+          drag.clientX = e.clientX;
+          drag.clientY = e.clientY;
+          drag.ghost.style.left = `${e.clientX}px`;
+          drag.ghost.style.top = `${e.clientY}px`;
+        }
+      },
+      { passive: false }
+    );
+
+    const finish = (e) => {
+      if (!drag || e.pointerId !== pointerId) return;
+      boardEl.releasePointerCapture(e.pointerId);
+
+      if (drag.ghost) {
+        endDrag(e.clientX, e.clientY);
+        return;
+      }
+
+      const sq = e.target.closest(".square");
+      if (sq) {
+        handleBoardTap(Number(sq.dataset.row), Number(sq.dataset.col));
+      }
+
+      drag = null;
+      pointerId = null;
+    };
+
+    boardEl.addEventListener("pointerup", finish);
+    boardEl.addEventListener("pointercancel", finish);
   }
 
   function applyServerState(state) {
@@ -457,6 +455,7 @@
   });
 
   buildBoardDom();
+  setupBoardInput();
   renderBoard();
   updateHud();
 })();
