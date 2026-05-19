@@ -1,5 +1,5 @@
 {
-  "name": "hand-drawn-checkers",
+  "name": "schmeckers-checkers",
   "version": "1.0.0",
   "description": "Multiplayer web checkers with a hand-drawn board overlay",
   "main": "server.js",

@@ -4,7 +4,6 @@
   const boardEl = document.getElementById("chessboard");
   const statusEl = document.getElementById("status-text");
   const turnEl = document.getElementById("turn-text");
-  const debugEl = document.getElementById("game-debug");
 
   const socket = io();
 
@@ -143,46 +142,7 @@
 
     const jumpRequired = hasJumpAvailable(stateBoard, color);
     const slides = collectSlidesForPiece(stateBoard, row, col);
-    const result = jumpRequired ? jumps : jumps.length ? jumps : slides;
-
-    // #region agent log
-    fetch("http://127.0.0.1:7655/ingest/aa34fa53-58e9-4d89-8a3a-0321552bfc6e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8b90ff" },
-      body: JSON.stringify({
-        sessionId: "8b90ff",
-        hypothesisId: "A",
-        location: "game.js:getLegalMoves",
-        message: "legal moves computed",
-        data: {
-          row,
-          col,
-          piece,
-          jumpRequired,
-          jumps: jumps.length,
-          slides: slides.length,
-          result: result.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
-    return result;
-  }
-
-  function refreshDebug(extra) {
-    if (!debugEl) return;
-    const parts = [
-      `you=${myColor || "?"}`,
-      `turn=${currentTurn}`,
-      `status=${gameStatus}`,
-      `canMove=${canInteract()}`,
-      `picked=${selected ? `${selected.row},${selected.col}` : "none"}`,
-      `moves=${validTargets.length}`,
-    ];
-    if (extra) parts.push(extra);
-    debugEl.textContent = parts.join(" | ");
+    return jumpRequired ? jumps : jumps.length ? jumps : slides;
   }
 
   function buildBoardDom() {
@@ -273,42 +233,36 @@
     }
 
     updateHighlights();
-    refreshDebug();
   }
 
   function updateHud() {
     if (winner) {
       turnEl.textContent = winner === myColor ? "You win!" : "You lose.";
-      refreshDebug();
       return;
     }
 
     if (!myColor) {
       turnEl.textContent = "Connecting…";
-      refreshDebug();
       return;
     }
 
     if (gameStatus !== "playing") {
       turnEl.textContent = "Waiting for game to start…";
-      refreshDebug();
       return;
     }
 
     if (mustJumpFrom && isMyTurn()) {
       turnEl.textContent = "Continue your jump!";
-      refreshDebug();
       return;
     }
 
     if (isMyTurn()) {
       turnEl.textContent = selected
-        ? "Click a green square to move"
-        : "Click one of your pieces";
+        ? "Tap a green square to move"
+        : "Tap one of your pieces";
     } else {
-      turnEl.textContent = "Opponent's turn — wait for them";
+      turnEl.textContent = "Opponent's turn";
     }
-    refreshDebug();
   }
 
   function clearSelection() {
@@ -327,22 +281,6 @@
 
     selected = { row, col };
     validTargets = getLegalMoves(board, row, col, forced);
-
-    // #region agent log
-    fetch("http://127.0.0.1:7655/ingest/aa34fa53-58e9-4d89-8a3a-0321552bfc6e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8b90ff" },
-      body: JSON.stringify({
-        sessionId: "8b90ff",
-        hypothesisId: "A",
-        location: "game.js:selectPiece",
-        message: "piece selected",
-        data: { row, col, piece: board[row][col], validTargets: validTargets.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     updateHighlights();
     updateHud();
     return true;
@@ -361,8 +299,6 @@
   }
 
   function onSquareActivated(row, col) {
-    refreshDebug(`tap ${row},${col}`);
-
     if (!myColor) {
       turnEl.textContent = "Not connected yet — wait a moment and refresh.";
       return;
@@ -441,13 +377,8 @@
     statusEl.textContent = "Room full — only 2 players at a time.";
   });
 
-  socket.on("connect", () => {
-    refreshDebug("socket connected");
-  });
-
   socket.on("connect_error", () => {
     statusEl.textContent = "Connection error — refresh the page.";
-    refreshDebug("socket error");
   });
 
   buildBoardDom();

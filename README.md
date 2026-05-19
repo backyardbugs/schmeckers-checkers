@@ -1,4 +1,4 @@
-# Hand-Drawn Checkers
+# Schmeckers
 
 Multiplayer American checkers in the browser. A transparent 8×8 grid sits on top of your hand-drawn board art; pieces are placeholder gradients until you swap in PNGs.
 

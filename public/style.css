@@ -6,14 +6,13 @@
 
 :root {
   --board-size: min(92vmin, 640px);
-  --paper: #f4ecd8;
-  --ink: #2b2118;
+  --blue-deep: #1a3d6b;
+  --blue-mid: #2d5f9e;
+  --blue-light: #4a85c4;
+  --ink: #f5f8fc;
+  --ink-muted: rgba(245, 248, 252, 0.82);
   --highlight: rgba(255, 220, 80, 0.45);
   --valid: rgba(90, 200, 120, 0.5);
-  --red-piece: #e85d4a;
-  --red-shadow: #9c3428;
-  --black-piece: #3d342c;
-  --black-shadow: #1a1510;
 }
 
 html,
@@ -26,9 +25,10 @@ body {
   font-family: "Nunito", system-ui, sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 20% 10%, #fff8ea 0%, transparent 45%),
-    radial-gradient(circle at 80% 90%, #efe2c4 0%, transparent 40%),
-    var(--paper);
+    radial-gradient(circle at 15% 20%, var(--blue-light) 0%, transparent 42%),
+    radial-gradient(circle at 85% 80%, var(--blue-mid) 0%, transparent 45%),
+    linear-gradient(160deg, var(--blue-deep) 0%, #152f52 50%, var(--blue-deep) 100%);
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -44,15 +44,18 @@ body {
 
 .hud h1 {
   font-family: "Caveat", cursive;
-  font-size: clamp(2rem, 5vw, 3rem);
+  font-size: clamp(2.5rem, 6vw, 3.75rem);
   margin: 0 0 0.25rem;
   letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 #status-text,
 #turn-text {
   margin: 0.15rem 0;
   font-weight: 600;
+  color: var(--ink-muted);
 }
 
 .board-stage {
@@ -67,7 +70,7 @@ body {
   position: relative;
   width: var(--board-size);
   height: var(--board-size);
-  filter: drop-shadow(0 12px 28px rgba(43, 33, 24, 0.18));
+  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.35));
 }
 
 .board-bg {
@@ -212,14 +215,7 @@ body {
 .hint {
   margin-top: 1rem;
   font-size: 0.9rem;
-  opacity: 0.75;
+  color: var(--ink-muted);
   text-align: center;
   max-width: 36rem;
-}
-
-.game-debug {
-  font-size: 0.8rem;
-  opacity: 0.85;
-  margin: 0.35rem 0 0;
-  font-family: ui-monospace, monospace;
 }
