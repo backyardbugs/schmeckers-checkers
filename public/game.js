@@ -147,6 +147,7 @@
   function updateHighlights() {
     for (const sq of squares) {
       sq.classList.remove("selected", "valid-target", "playable");
+      sq.querySelectorAll(".move-dot").forEach((d) => d.remove());
     }
     if (!canInteract()) return;
 
@@ -158,9 +159,23 @@
       }
     }
     if (!selected) return;
+
     squareAt(selected.row, selected.col).classList.add("selected");
+
     for (const move of validTargets) {
-      squareAt(move.to.row, move.to.col).classList.add("valid-target");
+      const sq = squareAt(move.to.row, move.to.col);
+      sq.classList.add("valid-target");
+      const dot = document.createElement("div");
+      dot.className = "move-dot";
+      dot.setAttribute("aria-hidden", "true");
+      sq.appendChild(dot);
+    }
+
+    if (validTargets.length === 0 && isMyTurn()) {
+      turnEl.textContent =
+        "No moves for this piece — pick another (a jump may be required elsewhere).";
+    } else if (isMyTurn()) {
+      turnEl.textContent = `Your turn — ${validTargets.length} possible move(s)`;
     }
   }
 
@@ -257,10 +272,13 @@
   }
 
   function squareFromPoint(x, y) {
-    const el = document.elementFromPoint(x, y);
-    const sq = el?.closest?.(".square");
-    if (!sq || !boardEl.contains(sq)) return null;
-    return { row: Number(sq.dataset.row), col: Number(sq.dataset.col) };
+    const rect = boardEl.getBoundingClientRect();
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      return null;
+    }
+    const col = Math.min(7, Math.max(0, Math.floor(((x - rect.left) / rect.width) * 8)));
+    const row = Math.min(7, Math.max(0, Math.floor(((y - rect.top) / rect.height) * 8)));
+    return { row, col };
   }
 
   function beginDrag(pieceEl, x, y) {
@@ -271,17 +289,24 @@
     pieceEl.classList.add("dragging");
     ghost.style.left = `${x}px`;
     ghost.style.top = `${y}px`;
-    drag = { pieceEl, ghost, clientX: x, clientY: y, moved: true };
+    drag.pieceEl = pieceEl;
+    drag.ghost = ghost;
+    drag.moved = true;
   }
 
   function endDrag(x, y) {
     if (!drag?.ghost) return;
     if (drag.pieceEl) drag.pieceEl.classList.remove("dragging");
     drag.ghost.remove();
+    drag.ghost = null;
 
     const target = squareFromPoint(x, y);
-    if (target) tryMoveTo(target.row, target.col);
-    else updateHighlights();
+    if (target && tryMoveTo(target.row, target.col)) {
+      updateHud();
+      return;
+    }
+    updateHighlights();
+    updateHud();
   }
 
   function handleBoardTap(row, col) {
@@ -327,6 +352,7 @@
         const isMine = piece && pieceColor(piece) === myColor;
         if (!isMine) return;
 
+        selectPiece(row, col);
         boardEl.setPointerCapture(e.pointerId);
         pointerId = e.pointerId;
 
@@ -353,10 +379,6 @@
 
         if (!drag.ghost && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
           e.preventDefault();
-          if (!selected) selectPiece(
-            Number(drag.pieceEl.closest(".square").dataset.row),
-            Number(drag.pieceEl.closest(".square").dataset.col)
-          );
           beginDrag(drag.pieceEl, e.clientX, e.clientY);
         }
 
