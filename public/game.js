@@ -16,8 +16,11 @@
 
   let selected = null;
   let validTargets = [];
+  let previousBoard = null;
+  let audioReady = false;
 
   const squares = [];
+  const audio = () => window.SchmeckersAudio;
 
   function createInitialBoard() {
     const b = Array.from({ length: 8 }, () => Array(8).fill(null));
@@ -299,6 +302,11 @@
   }
 
   function onSquareActivated(row, col) {
+    if (!audioReady && window.SchmeckersAudio) {
+      audio().unlock();
+      audioReady = true;
+    }
+
     if (!myColor) {
       turnEl.textContent = "Not connected yet — wait a moment and refresh.";
       return;
@@ -331,8 +339,20 @@
     updateHud();
   }
 
+  function cloneBoard(b) {
+    return b.map((row) => row.slice());
+  }
+
   function applyServerState(state) {
-    board = state.board;
+    const newBoard = state.board;
+
+    if (previousBoard && audioReady) {
+      const moveInfo = audio().analyzeBoardChange(previousBoard, newBoard);
+      if (moveInfo) audio().playMoveSound(moveInfo);
+    }
+
+    previousBoard = cloneBoard(newBoard);
+    board = newBoard;
     currentTurn = state.currentTurn;
     mustJumpFrom = state.mustJumpFrom;
     winner = state.winner;
@@ -381,7 +401,43 @@
     statusEl.textContent = "Connection error — refresh the page.";
   });
 
+  function setupAudioControls() {
+    const muteBtn = document.getElementById("mute-btn");
+    const musicBtn = document.getElementById("music-btn");
+    if (!muteBtn || !musicBtn) return;
+
+    const refreshButtons = () => {
+      if (!window.SchmeckersAudio) return;
+      muteBtn.textContent = audio().isMuted() ? "Sound: Off" : "Sound: On";
+      musicBtn.textContent = audio().isMusicOn()
+        ? "Music: On"
+        : "Music: Off";
+    };
+
+    muteBtn.addEventListener("click", () => {
+      if (!audioReady) {
+        audio().unlock();
+        audioReady = true;
+      }
+      audio().setMuted(!audio().isMuted());
+      refreshButtons();
+    });
+
+    musicBtn.addEventListener("click", () => {
+      if (!audioReady) {
+        audio().unlock();
+        audioReady = true;
+      }
+      audio().toggleMusic();
+      refreshButtons();
+    });
+
+    refreshButtons();
+  }
+
   buildBoardDom();
+  setupAudioControls();
+  previousBoard = cloneBoard(board);
   renderBoard();
   updateHud();
 })();

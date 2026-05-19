@@ -14,6 +14,10 @@
     <h1>Schmeckers</h1>
     <p id="status-text">Connecting…</p>
     <p id="turn-text"></p>
+    <div class="audio-controls">
+      <button type="button" id="music-btn" class="audio-btn">Music: On</button>
+      <button type="button" id="mute-btn" class="audio-btn">Sound: On</button>
+    </div>
   </header>
 
   <main class="board-stage">
@@ -33,6 +37,7 @@
   <p class="hint">Tap your piece, then tap a green square. Red moves first.</p>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js?v=7"></script>
+  <script src="audio.js?v=1"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>
