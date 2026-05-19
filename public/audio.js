@@ -19,6 +19,7 @@
   };
 
   const cache = {};
+  const pool = {};
   let bgm = null;
   let unlocked = false;
   let muted = false;
@@ -29,17 +30,32 @@
       const audio = new Audio(src);
       audio.preload = "auto";
       cache[src] = audio;
+      pool[src] = [];
     }
     return cache[src];
+  }
+
+  function warmPool(src, count = 3) {
+    load(src);
+    while (pool[src].length < count) {
+      const inst = cache[src].cloneNode();
+      inst.volume = 0.85;
+      pool[src].push(inst);
+    }
   }
 
   function playSrc(src) {
     if (muted || !src) return;
     try {
-      const sound = load(src);
-      const inst = sound.cloneNode();
+      warmPool(src);
+      const inst = pool[src].pop() || cache[src].cloneNode();
       inst.volume = 0.85;
-      inst.play().catch(() => {});
+      inst.currentTime = 0;
+      const done = () => {
+        if (pool[src].length < 4) pool[src].push(inst);
+      };
+      inst.addEventListener("ended", done, { once: true });
+      inst.play().catch(done);
     } catch (_) {
       /* ignore */
     }
@@ -98,7 +114,39 @@
     const promoted = !isKing(from.piece) && isKing(to.piece);
     const king = isKing(to.piece);
 
-    return { colorKey: moverColor, jump, promoted, king };
+    return {
+      colorKey: moverColor,
+      jump,
+      promoted,
+      king,
+      from: { row: from.r, col: from.c },
+      to: { row: to.r, col: to.c },
+    };
+  }
+
+  function moveKey(from, to) {
+    return `${from.row},${from.col}-${to.row},${to.col}`;
+  }
+
+  function soundFromMove(board, move, playerColor) {
+    const piece = board[move.from.row][move.from.col];
+    if (!piece) return null;
+
+    const colorKey = playerColor === "red" ? "red" : "blue";
+    const wasKing = isKing(piece);
+    const promoted =
+      !wasKing &&
+      ((colorKey === "red" && move.to.row === 0) ||
+        (colorKey === "blue" && move.to.row === 7));
+
+    return {
+      colorKey,
+      jump: move.type === "jump",
+      promoted,
+      king: wasKing,
+      from: move.from,
+      to: move.to,
+    };
   }
 
   function startBgm() {
@@ -121,8 +169,8 @@
   function unlock() {
     if (unlocked) return;
     unlocked = true;
-    Object.values(SFX.red).forEach((src) => load(src));
-    Object.values(SFX.blue).forEach((src) => load(src));
+    Object.values(SFX.red).forEach((src) => warmPool(src));
+    Object.values(SFX.blue).forEach((src) => warmPool(src));
     load("/audio/bgmusic.m4a");
     startBgm();
   }
@@ -146,6 +194,8 @@
     toggleMusic,
     playMoveSound,
     analyzeBoardChange,
+    soundFromMove,
+    moveKey,
     isMusicOn: () => musicOn,
     isMuted: () => muted,
   };

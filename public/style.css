@@ -83,7 +83,7 @@ body {
     linear-gradient(225deg, #d9c9a8 25%, transparent 25%) -12px 0 / 24px 24px,
     linear-gradient(315deg, #d9c9a8 25%, transparent 25%) 0 0 / 24px 24px,
     linear-gradient(45deg, #d9c9a8 25%, #e8dcc0 25%) 0 0 / 24px 24px;
-  border: 3px solid var(--ink);
+  border: none;
 }
 
 #chessboard {

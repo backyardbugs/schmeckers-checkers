@@ -18,6 +18,7 @@
   let validTargets = [];
   let previousBoard = null;
   let audioReady = false;
+  let lastLocalMoveKey = null;
 
   const squares = [];
   const audio = () => window.SchmeckersAudio;
@@ -289,11 +290,20 @@
     return true;
   }
 
+  function playLocalMoveSound(move) {
+    if (!audioReady || !window.SchmeckersAudio || !myColor) return;
+    const info = audio().soundFromMove(board, move, myColor);
+    if (!info) return;
+    lastLocalMoveKey = audio().moveKey(move.from, move.to);
+    audio().playMoveSound(info);
+  }
+
   function tryMoveTo(row, col) {
     const move = validTargets.find(
       (m) => m.to.row === row && m.to.col === col
     );
     if (!move) return false;
+    playLocalMoveSound(move);
     socket.emit("makeMove", { from: move.from, to: move.to });
     clearSelection();
     updateHighlights();
@@ -348,7 +358,13 @@
 
     if (previousBoard && audioReady) {
       const moveInfo = audio().analyzeBoardChange(previousBoard, newBoard);
-      if (moveInfo) audio().playMoveSound(moveInfo);
+      if (moveInfo) {
+        const key = audio().moveKey(moveInfo.from, moveInfo.to);
+        if (key !== lastLocalMoveKey) {
+          audio().playMoveSound(moveInfo);
+        }
+        lastLocalMoveKey = null;
+      }
     }
 
     previousBoard = cloneBoard(newBoard);
