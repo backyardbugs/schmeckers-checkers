@@ -52,57 +52,60 @@ function opponent(color) {
   return color === "red" ? "black" : "red";
 }
 
-function getLegalMoves(board, row, col, mustJumpFrom = null) {
+function collectJumpsForPiece(board, row, col) {
   const piece = board[row][col];
   if (!piece) return [];
 
   const color = pieceColor(piece);
   const king = isKing(piece);
-  const moves = [];
   const jumps = [];
+  const dirs = forwardDirs(color, king);
 
+  for (const [dr, dc] of dirs) {
+    const nr = row + dr;
+    const nc = col + dc;
+    const jr = row + dr * 2;
+    const jc = col + dc * 2;
+
+    if (
+      inBounds(jr, jc) &&
+      isDarkSquare(jr, jc) &&
+      !board[jr][jc] &&
+      inBounds(nr, nc) &&
+      board[nr][nc] &&
+      pieceColor(board[nr][nc]) === opponent(color)
+    ) {
+      jumps.push({
+        from: { row, col },
+        to: { row: jr, col: jc },
+        jumped: { row: nr, col: nc },
+        type: "jump",
+      });
+    }
+  }
+  return jumps;
+}
+
+function collectSlidesForPiece(board, row, col) {
+  const piece = board[row][col];
+  if (!piece) return [];
+
+  const color = pieceColor(piece);
+  const king = isKing(piece);
+  const slides = [];
   const dirs = forwardDirs(color, king);
 
   for (const [dr, dc] of dirs) {
     const nr = row + dr;
     const nc = col + dc;
     if (!inBounds(nr, nc) || !isDarkSquare(nr, nc) || board[nr][nc]) continue;
-
-    const jr = row + dr * 2;
-    const jc = col + dc * 2;
-    const mr = row + dr;
-    const mc = col + dc;
-
-    if (
-      inBounds(jr, jc) &&
-      isDarkSquare(jr, jc) &&
-      !board[jr][jc] &&
-      board[mr][mc] &&
-      pieceColor(board[mr][mc]) === opponent(color)
-    ) {
-      jumps.push({
-        from: { row, col },
-        to: { row: jr, col: jc },
-        jumped: { row: mr, col: mc },
-        type: "jump",
-      });
-    } else if (!mustJumpFrom) {
-      moves.push({
-        from: { row, col },
-        to: { row: nr, col: nc },
-        type: "slide",
-      });
-    }
+    slides.push({
+      from: { row, col },
+      to: { row: nr, col: nc },
+      type: "slide",
+    });
   }
-
-  if (mustJumpFrom) {
-    if (mustJumpFrom.row !== row || mustJumpFrom.col !== col) return [];
-    return jumps;
-  }
-
-  const anyJumpOnBoard = hasJumpAvailable(board, color);
-  if (anyJumpOnBoard) return jumps;
-  return jumps.length ? jumps : moves;
+  return slides;
 }
 
 function hasJumpAvailable(board, color) {
@@ -110,11 +113,27 @@ function hasJumpAvailable(board, color) {
     for (let col = 0; col < 8; col++) {
       const piece = board[row][col];
       if (!piece || pieceColor(piece) !== color) continue;
-      const jumps = getLegalMoves(board, row, col, null).filter((m) => m.type === "jump");
-      if (jumps.length) return true;
+      if (collectJumpsForPiece(board, row, col).length) return true;
     }
   }
   return false;
+}
+
+function getLegalMoves(board, row, col, mustJumpFrom = null) {
+  const piece = board[row][col];
+  if (!piece) return [];
+
+  const color = pieceColor(piece);
+  const jumps = collectJumpsForPiece(board, row, col);
+
+  if (mustJumpFrom) {
+    if (mustJumpFrom.row !== row || mustJumpFrom.col !== col) return [];
+    return jumps;
+  }
+
+  if (hasJumpAvailable(board, color)) return jumps;
+  const slides = collectSlidesForPiece(board, row, col);
+  return jumps.length ? jumps : slides;
 }
 
 function applyMove(board, move) {

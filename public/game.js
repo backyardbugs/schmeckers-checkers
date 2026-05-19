@@ -4,6 +4,7 @@
   const boardEl = document.getElementById("chessboard");
   const statusEl = document.getElementById("status-text");
   const turnEl = document.getElementById("turn-text");
+  const debugEl = document.getElementById("game-debug");
 
   const socket = io();
 
@@ -16,10 +17,6 @@
 
   let selected = null;
   let validTargets = [];
-  let drag = null;
-  let pointerId = null;
-  let suppressClick = false;
-  const DRAG_THRESHOLD = 12;
 
   const squares = [];
 
@@ -48,6 +45,10 @@
     return piece === "R" || piece === "B";
   }
 
+  function isMyPiece(piece) {
+    return piece && myColor && pieceColor(piece) === myColor;
+  }
+
   function forwardDirs(color, king) {
     if (king) return [[-1, -1], [-1, 1], [1, -1], [1, 1]];
     return color === "red" ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
@@ -61,55 +62,60 @@
     return color === "red" ? "black" : "red";
   }
 
-  function getLegalMoves(stateBoard, row, col, forcedJumpFrom) {
+  function collectJumpsForPiece(stateBoard, row, col) {
     const piece = stateBoard[row][col];
     if (!piece) return [];
 
     const color = pieceColor(piece);
     const king = isKing(piece);
-    const moves = [];
     const jumps = [];
     const dirs = forwardDirs(color, king);
 
     for (const [dr, dc] of dirs) {
       const nr = row + dr;
       const nc = col + dc;
-      if (!inBounds(nr, nc) || !isDarkSquare(nr, nc) || stateBoard[nr][nc]) continue;
-
       const jr = row + dr * 2;
       const jc = col + dc * 2;
-      const mr = row + dr;
-      const mc = col + dc;
 
       if (
         inBounds(jr, jc) &&
         isDarkSquare(jr, jc) &&
         !stateBoard[jr][jc] &&
-        stateBoard[mr][mc] &&
-        pieceColor(stateBoard[mr][mc]) === opponent(color)
+        inBounds(nr, nc) &&
+        stateBoard[nr][nc] &&
+        pieceColor(stateBoard[nr][nc]) === opponent(color)
       ) {
         jumps.push({
           from: { row, col },
           to: { row: jr, col: jc },
-          jumped: { row: mr, col: mc },
+          jumped: { row: nr, col: nc },
           type: "jump",
-        });
-      } else if (!forcedJumpFrom) {
-        moves.push({
-          from: { row, col },
-          to: { row: nr, col: nc },
-          type: "slide",
         });
       }
     }
+    return jumps;
+  }
 
-    if (forcedJumpFrom) {
-      if (forcedJumpFrom.row !== row || forcedJumpFrom.col !== col) return [];
-      return jumps;
+  function collectSlidesForPiece(stateBoard, row, col) {
+    const piece = stateBoard[row][col];
+    if (!piece) return [];
+
+    const color = pieceColor(piece);
+    const king = isKing(piece);
+    const slides = [];
+    const dirs = forwardDirs(color, king);
+
+    for (const [dr, dc] of dirs) {
+      const nr = row + dr;
+      const nc = col + dc;
+      if (!inBounds(nr, nc) || !isDarkSquare(nr, nc) || stateBoard[nr][nc]) continue;
+      slides.push({
+        from: { row, col },
+        to: { row: nr, col: nc },
+        type: "slide",
+      });
     }
-
-    if (hasJumpAvailable(stateBoard, color)) return jumps;
-    return jumps.length ? jumps : moves;
+    return slides;
   }
 
   function hasJumpAvailable(stateBoard, color) {
@@ -117,11 +123,66 @@
       for (let c = 0; c < 8; c++) {
         const piece = stateBoard[r][c];
         if (!piece || pieceColor(piece) !== color) continue;
-        const jumps = getLegalMoves(stateBoard, r, c, null).filter((m) => m.type === "jump");
-        if (jumps.length) return true;
+        if (collectJumpsForPiece(stateBoard, r, c).length) return true;
       }
     }
     return false;
+  }
+
+  function getLegalMoves(stateBoard, row, col, forcedJumpFrom) {
+    const piece = stateBoard[row][col];
+    if (!piece) return [];
+
+    const color = pieceColor(piece);
+    const jumps = collectJumpsForPiece(stateBoard, row, col);
+
+    if (forcedJumpFrom) {
+      if (forcedJumpFrom.row !== row || forcedJumpFrom.col !== col) return [];
+      return jumps;
+    }
+
+    const jumpRequired = hasJumpAvailable(stateBoard, color);
+    const slides = collectSlidesForPiece(stateBoard, row, col);
+    const result = jumpRequired ? jumps : jumps.length ? jumps : slides;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7655/ingest/aa34fa53-58e9-4d89-8a3a-0321552bfc6e", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8b90ff" },
+      body: JSON.stringify({
+        sessionId: "8b90ff",
+        hypothesisId: "A",
+        location: "game.js:getLegalMoves",
+        message: "legal moves computed",
+        data: {
+          row,
+          col,
+          piece,
+          jumpRequired,
+          jumps: jumps.length,
+          slides: slides.length,
+          result: result.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    return result;
+  }
+
+  function refreshDebug(extra) {
+    if (!debugEl) return;
+    const parts = [
+      `you=${myColor || "?"}`,
+      `turn=${currentTurn}`,
+      `status=${gameStatus}`,
+      `canMove=${canInteract()}`,
+      `picked=${selected ? `${selected.row},${selected.col}` : "none"}`,
+      `moves=${validTargets.length}`,
+    ];
+    if (extra) parts.push(extra);
+    debugEl.textContent = parts.join(" | ");
   }
 
   function buildBoardDom() {
@@ -134,6 +195,16 @@
         sq.className = "square";
         sq.dataset.row = String(row);
         sq.dataset.col = String(col);
+
+        const onActivate = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSquareActivated(row, col);
+        };
+
+        sq.addEventListener("mousedown", onActivate);
+        sq.addEventListener("touchend", onActivate, { passive: false });
+
         boardEl.appendChild(sq);
         squares.push(sq);
       }
@@ -144,20 +215,30 @@
     return squares[row * 8 + col];
   }
 
+  function canInteract() {
+    return gameStatus === "playing" && !winner && myColor && myColor === currentTurn;
+  }
+
+  function isMyTurn() {
+    return myColor && myColor === currentTurn;
+  }
+
   function updateHighlights() {
     for (const sq of squares) {
       sq.classList.remove("selected", "valid-target", "playable");
       sq.querySelectorAll(".move-dot").forEach((d) => d.remove());
     }
+
     if (!canInteract()) return;
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
-        if (board[row][col] && pieceColor(board[row][col]) === myColor) {
+        if (isMyPiece(board[row][col])) {
           squareAt(row, col).classList.add("playable");
         }
       }
     }
+
     if (!selected) return;
 
     squareAt(selected.row, selected.col).classList.add("selected");
@@ -167,15 +248,7 @@
       sq.classList.add("valid-target");
       const dot = document.createElement("div");
       dot.className = "move-dot";
-      dot.setAttribute("aria-hidden", "true");
       sq.appendChild(dot);
-    }
-
-    if (validTargets.length === 0 && isMyTurn()) {
-      turnEl.textContent =
-        "No moves for this piece — pick another (a jump may be required elsewhere).";
-    } else if (isMyTurn()) {
-      turnEl.textContent = `Your turn — ${validTargets.length} possible move(s)`;
     }
   }
 
@@ -194,48 +267,48 @@
         const color = pieceColor(piece);
         el.classList.add(color === "black" ? "blue" : color);
         if (isKing(piece)) el.classList.add("king");
-        el.classList.add(myColor === color ? "mine" : "opponent");
+        el.classList.add(isMyPiece(piece) ? "mine" : "opponent");
         sq.appendChild(el);
       }
     }
+
     updateHighlights();
-  }
-
-  function canInteract() {
-    return gameStatus === "playing" && !winner && myColor === currentTurn;
-  }
-
-  function isMyTurn() {
-    return myColor && myColor === currentTurn;
+    refreshDebug();
   }
 
   function updateHud() {
     if (winner) {
-      const label = winner === myColor ? "You win!" : "You lose.";
-      turnEl.textContent = label;
-      return;
-    }
-
-    if (gameStatus === "waiting") {
-      turnEl.textContent = myColor
-        ? "Connecting… open this link on a second device for 2-player."
-        : "";
+      turnEl.textContent = winner === myColor ? "You win!" : "You lose.";
+      refreshDebug();
       return;
     }
 
     if (!myColor) {
-      turnEl.textContent = "";
+      turnEl.textContent = "Connecting…";
+      refreshDebug();
+      return;
+    }
+
+    if (gameStatus !== "playing") {
+      turnEl.textContent = "Waiting for game to start…";
+      refreshDebug();
       return;
     }
 
     if (mustJumpFrom && isMyTurn()) {
       turnEl.textContent = "Continue your jump!";
+      refreshDebug();
       return;
     }
 
-    turnEl.textContent = isMyTurn()
-      ? "Your turn"
-      : "Opponent's turn";
+    if (isMyTurn()) {
+      turnEl.textContent = selected
+        ? "Click a green square to move"
+        : "Click one of your pieces";
+    } else {
+      turnEl.textContent = "Opponent's turn — wait for them";
+    }
+    refreshDebug();
   }
 
   function clearSelection() {
@@ -250,13 +323,28 @@
   function selectPiece(row, col) {
     const forced = forcedJumpSquare();
     if (forced && (forced.row !== row || forced.col !== col)) return false;
-
-    const piece = board[row][col];
-    if (!piece || pieceColor(piece) !== myColor) return false;
+    if (!isMyPiece(board[row][col])) return false;
 
     selected = { row, col };
     validTargets = getLegalMoves(board, row, col, forced);
+
+    // #region agent log
+    fetch("http://127.0.0.1:7655/ingest/aa34fa53-58e9-4d89-8a3a-0321552bfc6e", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8b90ff" },
+      body: JSON.stringify({
+        sessionId: "8b90ff",
+        hypothesisId: "A",
+        location: "game.js:selectPiece",
+        message: "piece selected",
+        data: { row, col, piece: board[row][col], validTargets: validTargets.length },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     updateHighlights();
+    updateHud();
     return true;
   }
 
@@ -268,49 +356,26 @@
     socket.emit("makeMove", { from: move.from, to: move.to });
     clearSelection();
     updateHighlights();
+    updateHud();
     return true;
   }
 
-  function squareFromPoint(x, y) {
-    const rect = boardEl.getBoundingClientRect();
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      return null;
+  function onSquareActivated(row, col) {
+    refreshDebug(`tap ${row},${col}`);
+
+    if (!myColor) {
+      turnEl.textContent = "Not connected yet — wait a moment and refresh.";
+      return;
     }
-    const col = Math.min(7, Math.max(0, Math.floor(((x - rect.left) / rect.width) * 8)));
-    const row = Math.min(7, Math.max(0, Math.floor(((y - rect.top) / rect.height) * 8)));
-    return { row, col };
-  }
 
-  function beginDrag(pieceEl, x, y) {
-    const ghost = pieceEl.cloneNode(true);
-    ghost.classList.add("drag-ghost");
-    ghost.classList.remove("dragging", "mine");
-    document.body.appendChild(ghost);
-    pieceEl.classList.add("dragging");
-    ghost.style.left = `${x}px`;
-    ghost.style.top = `${y}px`;
-    drag.pieceEl = pieceEl;
-    drag.ghost = ghost;
-    drag.moved = true;
-  }
-
-  function endDrag(x, y) {
-    if (!drag?.ghost) return;
-    if (drag.pieceEl) drag.pieceEl.classList.remove("dragging");
-    drag.ghost.remove();
-    drag.ghost = null;
-
-    const target = squareFromPoint(x, y);
-    if (target && tryMoveTo(target.row, target.col)) {
+    if (!canInteract()) {
+      turnEl.textContent =
+        myColor !== currentTurn
+          ? `Not your turn — you are ${myColor}, waiting for ${currentTurn}.`
+          : "You can't move right now.";
       updateHud();
       return;
     }
-    updateHighlights();
-    updateHud();
-  }
-
-  function handleBoardTap(row, col) {
-    if (!canInteract()) return;
 
     const forced = forcedJumpSquare();
     if (forced) {
@@ -320,100 +385,14 @@
 
     if (selected && tryMoveTo(row, col)) return;
 
-    const piece = board[row][col];
-    if (piece && pieceColor(piece) === myColor) {
+    if (isMyPiece(board[row][col])) {
       selectPiece(row, col);
       return;
     }
 
     clearSelection();
     updateHighlights();
-  }
-
-  function setupBoardInput() {
-    // Reliable click/tap on desktop and mobile
-    boardEl.addEventListener("click", (e) => {
-      if (!canInteract() || suppressClick) return;
-      const sq = e.target.closest(".square");
-      if (!sq) return;
-      handleBoardTap(Number(sq.dataset.row), Number(sq.dataset.col));
-    });
-
-    boardEl.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (!canInteract() || e.button > 0) return;
-        const sq = e.target.closest(".square");
-        if (!sq) return;
-
-        const row = Number(sq.dataset.row);
-        const col = Number(sq.dataset.col);
-        const piece = board[row][col];
-        const isMine = piece && pieceColor(piece) === myColor;
-        if (!isMine) return;
-
-        selectPiece(row, col);
-        boardEl.setPointerCapture(e.pointerId);
-        pointerId = e.pointerId;
-
-        const pieceEl = sq.querySelector(".piece.mine");
-        drag = {
-          pieceEl,
-          ghost: null,
-          startX: e.clientX,
-          startY: e.clientY,
-          clientX: e.clientX,
-          clientY: e.clientY,
-          moved: false,
-        };
-      },
-      { passive: true }
-    );
-
-    boardEl.addEventListener(
-      "pointermove",
-      (e) => {
-        if (!drag || e.pointerId !== pointerId || !drag.pieceEl) return;
-        const dx = e.clientX - drag.startX;
-        const dy = e.clientY - drag.startY;
-
-        if (!drag.ghost && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
-          e.preventDefault();
-          beginDrag(drag.pieceEl, e.clientX, e.clientY);
-        }
-
-        if (drag.ghost) {
-          e.preventDefault();
-          drag.ghost.style.left = `${e.clientX}px`;
-          drag.ghost.style.top = `${e.clientY}px`;
-        }
-      },
-      { passive: false }
-    );
-
-    const finishPointer = (e) => {
-      if (!drag || e.pointerId !== pointerId) return;
-      try {
-        boardEl.releasePointerCapture(e.pointerId);
-      } catch (_) {
-        /* already released */
-      }
-
-      if (drag.ghost) {
-        e.preventDefault();
-        suppressClick = true;
-        endDrag(e.clientX, e.clientY);
-        setTimeout(() => {
-          suppressClick = false;
-        }, 50);
-      }
-
-      drag = null;
-      pointerId = null;
-    };
-
-    boardEl.addEventListener("pointerup", finishPointer);
-    boardEl.addEventListener("pointercancel", finishPointer);
+    updateHud();
   }
 
   function applyServerState(state) {
@@ -441,52 +420,37 @@
   socket.on("joined", ({ color, state }) => {
     myColor = color;
     statusEl.textContent =
-      color === "red"
-        ? "You are Red — Player 1"
-        : "You are Blue — Player 2";
+      color === "red" ? "You are Red (move first)" : "You are Blue";
     applyServerState(state);
-    updateStatusMessage(state);
   });
-
-  function updateStatusMessage(state) {
-    const shareUrl = window.location.href;
-    const waitingForFriend =
-      state.status === "playing" &&
-      !(state.players.red && state.players.black);
-
-    if (state.winner) return;
-
-    if (waitingForFriend) {
-      statusEl.textContent =
-        "Practice mode — send this link to your friend: " + shareUrl;
-      return;
-    }
-
-    if (state.status === "playing") {
-      statusEl.textContent = "Game in progress — " + shareUrl;
-    }
-  }
 
   socket.on("stateUpdate", (state) => {
     applyServerState(state);
-    updateStatusMessage(state);
+    if (state.status === "playing" && !state.winner) {
+      statusEl.textContent = "Game in progress";
+    }
   });
 
   socket.on("playerDisconnected", ({ message }) => {
     statusEl.textContent = message;
     clearSelection();
+    updateHud();
   });
 
   socket.on("gameFull", () => {
-    statusEl.textContent = "Room full — only two players at a time.";
+    statusEl.textContent = "Room full — only 2 players at a time.";
   });
 
   socket.on("connect", () => {
-    if (!myColor) statusEl.textContent = "Connected. Waiting for assignment…";
+    refreshDebug("socket connected");
+  });
+
+  socket.on("connect_error", () => {
+    statusEl.textContent = "Connection error — refresh the page.";
+    refreshDebug("socket error");
   });
 
   buildBoardDom();
-  setupBoardInput();
   renderBoard();
   updateHud();
 })();
